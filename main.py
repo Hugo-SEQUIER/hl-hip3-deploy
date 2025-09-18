@@ -11,7 +11,7 @@ from src.prices.redstone_prices import fetch_redstone_prices
 from src.prices.hl_spot_prices import get_spot_mid, get_stable_usd_factors, debug_spot_catalog
 from src.prices.hl_spot_prices import list_spot_pairs_for_token, get_spot_mid_any
 from src.hip3.token_ids import get_api_url, build_token_index_map, resolve_tokens
-from src.compute.stable_fx import resolve_stable_usd_factor
+from src.compute.stable_fx import resolve_stable_usd_factor_with_usdc_reference
 
 
 def main_token_ids():
@@ -114,7 +114,8 @@ def main_build_btc_quotes_for_dexes():
     """
     Build BTC/<stable> quotes using:
       - BTC/USD from RedStone,
-      - <stable>/USD from HL Spot or DexScreener (HyperEVM),
+      - USDC/USD from RedStone,
+      - <stable>/USD from HL Spot or DexScreener (HyperEVM) with proper USDC reference,
       - fallback peg=1.0 if needed.
 
     Prints a compact JSON you can turn into HIP-3 oracle maps.
@@ -128,21 +129,23 @@ def main_build_btc_quotes_for_dexes():
         "USDC":  "0x6d1e7cde53ba9467b783cb7c530ce054"
     }
 
-    # 1) RedStone BTC/USD
-    rs = fetch_redstone_prices(["BTC", "USDT0", "USDC"])
+    # 1) RedStone BTC/USD and USDC/USD
+    rs = fetch_redstone_prices(["BTC", "USDC"])
     btc_usd = float(rs["BTC"]["value"])
+    usdc_usd = float(rs["USDC"]["value"])
 
-    # 2) Resolve stables vs USD-like
+    # 2) Resolve stables vs USD using proper USDC reference
     info = Info(get_api_url("mainnet"), skip_ws=True)
-    fx_feusd  = resolve_stable_usd_factor(info, "FEUSD", evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
-    fx_usdhl  = resolve_stable_usd_factor(info, "USDHL", evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
-    fx_usdt0  = resolve_stable_usd_factor(info, "USDT0", evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
+    fx_feusd  = resolve_stable_usd_factor_with_usdc_reference(info, "FEUSD", usdc_usd, evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
+    fx_usdhl  = resolve_stable_usd_factor_with_usdc_reference(info, "USDHL", usdc_usd, evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
+    fx_usdt0  = resolve_stable_usd_factor_with_usdc_reference(info, "USDT0", usdc_usd, evm_addresses=EVM_ADDR, evm_usd_reference="USDC")
 
     # 3) Convert BTC/USD -> BTC/<stable>
     # BTC/X = (BTC/USD) / (X/USD)
     out = {
         "inputs": {
             "btc_usd_redstone": btc_usd,
+            "usdc_usd_redstone": usdc_usd,
             "fx_feusd_usd": fx_feusd,
             "fx_usdhl_usd": fx_usdhl,
             "fx_usdt0_usd": fx_usdt0,
