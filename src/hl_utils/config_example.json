@@ -1,0 +1,8 @@
+{
+    "account_address": "0xYourHyperliquidAccountAddress",
+    "secret_key": "0xYOUR_PRIVATE_KEY",
+    "keystore_path": "",
+    "multi_sig": {
+        "authorized_users": []
+    }
+}
