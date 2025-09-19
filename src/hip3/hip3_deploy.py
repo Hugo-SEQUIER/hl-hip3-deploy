@@ -67,7 +67,7 @@ def register_first_asset_and_create_dex(exchange, address: str, dex_spec: Dict, 
         sz_decimals=int(first["sz_decimals"]),
         oracle_px=str(first["initial_oracle_px"]),
         margin_table_id=int(dex_spec["margin_table_id"]),
-        only_isolated=False,
+        only_isolated=first["isolated_only"],
         schema={
             "fullName": dex_spec["full_name"],
             "collateralToken": collateral_index,
@@ -86,34 +86,114 @@ def register_extra_assets(exchange, dex_spec: Dict):
             sz_decimals=int(asset["sz_decimals"]),
             oracle_px=str(asset["initial_oracle_px"]),
             margin_table_id=int(dex_spec["margin_table_id"]),
-            only_isolated=False,
+            only_isolated=True,
             schema=None,
         )
         print(f"[register asset] {dex_spec['dex']}:{asset['coin']} -> {res}")
         time.sleep(1)
 
 
-def main():
-    # 0) Wallet + connections (via example_utils from HL examples)
+def get_missing_assets(info: Info, dex_spec: Dict) -> list:
+    """Return list of assets that are missing from the DEX."""
+    try:
+        meta = info.meta(dex=dex_spec["dex"])
+        deployed_assets = set()
+        
+        # Get list of deployed assets from meta
+        if "universe" in meta:
+            for asset in meta["universe"]:
+                asset_name = asset.get("name", "")
+                if asset_name.startswith(f"{dex_spec['dex']}:"):
+                    coin_name = asset_name.split(":", 1)[1]
+                    deployed_assets.add(coin_name)
+        
+        # Find missing assets
+        missing_assets = []
+        for asset in dex_spec["assets"]:
+            if asset["coin"] not in deployed_assets:
+                missing_assets.append(asset)
+        
+        return missing_assets
+    except Exception as e:
+        print(f"[warn] Could not check existing assets for {dex_spec['dex']}: {e}")
+        # If we can't check, assume all assets are missing
+        return dex_spec["assets"]
+
+
+def register_missing_assets(exchange, dex_spec: dict, missing_assets: list, max_retries: int = 3):
+    for asset in missing_assets:
+        retries = 0
+        while retries < max_retries:
+            try:
+                res = exchange.perp_deploy_register_asset(
+                    dex=dex_spec["dex"],                 # e.g. "btcx"
+                    max_gas=None,                        # <-- ensure SDK omits maxGas in JSON
+                    coin=str(asset["coin"]),             # e.g. "BTC-USDHL" (NO "dex:" prefix)
+                    sz_decimals=int(asset["sz_decimals"]),
+                    oracle_px=str(asset["initial_oracle_px"]),
+                    margin_table_id=int(dex_spec["margin_table_id"]),
+                    only_isolated=bool(asset.get("isolated_only", False)),
+                    schema=None,                         # adding to existing DEX
+                )
+
+                status = (res or {}).get("status", "").lower()
+                err = (res or {}).get("response", "") or (res or {}).get("error", "")
+
+                if status == "ok":
+                    print(f"[success] {dex_spec['dex']}:{asset['coin']} registered")
+                    break
+
+                if any(s in (err or "").lower() for s in ["already exists", "duplicate", "asset exists"]):
+                    print(f"[ok-idempotent] {dex_spec['dex']}:{asset['coin']} already registered")
+                    break
+
+                if any(s in (err or "").lower() for s in ["auction", "gas auction", "temporarily", "busy", "try again"]):
+                    retries += 1
+                    sleep = 1.5 * retries
+                    print(f"[retry {retries}/{max_retries}] transient: {err} -> sleep {sleep:.1f}s")
+                    time.sleep(sleep)
+                    continue
+
+                print(f"[failed] {dex_spec['dex']}:{asset['coin']} - {err or 'Unknown error'}")
+                break
+
+            except Exception as e:
+                retries += 1
+                if retries < max_retries:
+                    sleep = 1.5 * retries
+                    print(f"[retry {retries}/{max_retries}] exception: {e} -> sleep {sleep:.1f}s")
+                    time.sleep(sleep)
+                else:
+                    print(f"[failed] {dex_spec['dex']}:{asset['coin']} - exception after max retries: {e}")
+                    break
+
+        time.sleep(0.5)
+
+def deploy_missing_assets_only():
+    """Deploy only the assets that are missing from existing DEXes."""
+    # 0) Wallet + connections
     address, info, exchange = example_utils.setup(API_URL, skip_ws=True)
     print("perp deploy auction:", info.query_perp_deploy_auction_status())
 
-    # 1) Deploy each DEX
+    # 1) Check each DEX for missing assets
     for spec in DEX_SPECS:
-        print(f"\n=== Deploy DEX {spec['dex']} (collateral={spec['collateral_symbol']}) ===")
-        coll_index = get_collateral_index(info, spec["collateral_symbol"])
-        res1 = register_first_asset_and_create_dex(exchange, address, spec, coll_index)
-        print("[create dex + register 1st asset] ->", res1)
-        time.sleep(1)
-
-        register_extra_assets(exchange, spec)
-
-        # 2) Inspect meta
+        print(f"\n=== Checking DEX {spec['dex']} for missing assets ===")
+        
+        missing_assets = get_missing_assets(info, spec)
+        
+        if not missing_assets:
+            print(f"[info] All assets already deployed for {spec['dex']}")
+            continue
+            
+        print(f"[info] Found {len(missing_assets)} missing assets for {spec['dex']}:")
+        for asset in missing_assets:
+            print(f"  - {asset['coin']}")
+        
+        # Deploy missing assets
+        register_missing_assets(exchange, spec, missing_assets)
+        
+        # 2) Show final meta
         meta = info.meta(dex=spec["dex"])
         print("[meta]", spec["dex"], "->", json.dumps(meta, indent=2))
 
-    print("\nAll done.")
-
-
-if __name__ == "__main__":
-    main()
+    print("\nMissing assets deployment completed.")

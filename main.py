@@ -12,6 +12,12 @@ from src.prices.hl_spot_prices import get_spot_mid, get_stable_usd_factors, debu
 from src.prices.hl_spot_prices import list_spot_pairs_for_token, get_spot_mid_any
 from src.hip3.token_ids import get_api_url, build_token_index_map, resolve_tokens
 from src.compute.stable_fx import resolve_stable_usd_factor_with_usdc_reference
+import src.hl_utils.example_utils as example_utils
+from src.hip3.hip3_config import DEX_SPECS, API_URL
+from src.hip3.hip3_deploy import get_collateral_index, register_first_asset_and_create_dex, register_extra_assets, deploy_missing_assets_only
+from src.hip3.hip3_update_oracle import update_oracle_for_dex
+from src.hip3.get_dex_info import get_info_dex
+import time
 
 
 def main_token_ids():
@@ -159,5 +165,39 @@ def main_build_btc_quotes_for_dexes():
 
     print(json.dumps(out, indent=2))
 
+
+def main_hip3_deploy():
+        # 0) Wallet + connections (via example_utils from HL examples)
+    address, info, exchange = example_utils.setup(API_URL, skip_ws=True)
+    print("perp deploy auction:", info.query_perp_deploy_auction_status())
+
+    # 1) Deploy each DEX
+    for spec in DEX_SPECS:
+        print(f"\n=== Deploy DEX {spec['dex']} (collateral={spec['collateral_symbol']}) ===")
+        coll_index = get_collateral_index(info, spec["collateral_symbol"])
+        res1 = register_first_asset_and_create_dex(exchange, address, spec, coll_index)
+        print("[create dex + register 1st asset] ->", res1)
+        time.sleep(1)
+
+        register_extra_assets(exchange, spec)
+
+        # 2) Inspect meta
+        meta = info.meta(dex=spec["dex"])
+        print("[meta]", spec["dex"], "->", json.dumps(meta, indent=2))
+
+    print("\nAll done.")
+
+def main_oracle_update():
+    result = update_oracle_for_dex("btcx", strict=False, debug=True)
+    print("Oracle update result:", result["status"], "coins:", result["pushed_coins"])
+
+def main_deploy_missing_assets():
+    """Deploy only missing assets for existing DEXes."""
+    deploy_missing_assets_only()
+
+def main_get_dex_info():
+    meta = get_info_dex("btcx")
+    print(json.dumps(meta, indent=2))
+
 if __name__ == "__main__":
-    main_build_btc_quotes_for_dexes()
+    main_oracle_update()

@@ -8,39 +8,24 @@ Edit ONE place, both scripts read from here.
 from hyperliquid.utils import constants
 
 # ---- Network ----
-API_URL = constants.MAINNET_API_URL   # or constants.TESTNET_API_URL
+API_URL = constants.TESTNET_API_URL   # or constants.TESTNET_API_URL
 
 # ---- Your DEXes (one collateral per DEX) ----
 # coin labels are arbitrary strings you’ll keep consistent in oracle updates
 DEX_SPECS = [
     {
-        "dex": "FEUSDx",                    # <= 6 chars
-        "full_name": "BTC vs FEUSD",
-        "collateral_symbol": "FEUSD",       # must be in HL spot tokens (index used for collateralToken)
+        "dex": "btcx",                      # <= 6 chars
+        "full_name": "BTC Perp Markets",
+        "collateral_symbol": "USDC",        # unique collateral for the whole DEX
         "margin_table_id": 10,
         "assets": [
-            {"coin": "BTC-FEUSD", "sz_decimals": 3, "initial_oracle_px": "65000.0"},
+            {"coin": "BTC-FEUSD",  "sz_decimals": 3, "initial_oracle_px": "117688.207", "isolated_only": True},
+            {"coin": "BTC-USDHL",  "sz_decimals": 3, "initial_oracle_px": "117099.648", "isolated_only": True},
+            {"coin": "BTC-USDT0",  "sz_decimals": 3, "initial_oracle_px": "117029.416", "isolated_only": True},
         ],
-    },
-    {
-        "dex": "USDHLx",
-        "full_name": "BTC vs USDHL",
-        "collateral_symbol": "USDHL",
-        "margin_table_id": 10,
-        "assets": [
-            {"coin": "BTC-USDHL", "sz_decimals": 3, "initial_oracle_px": "65000.0"},
-        ],
-    },
-    {
-        "dex": "USDT0x",
-        "full_name": "BTC vs USDT0",
-        "collateral_symbol": "USDT0",
-        "margin_table_id": 10,
-        "assets": [
-            {"coin": "BTC-USDT0", "sz_decimals": 3, "initial_oracle_px": "65000.0"},
-        ],
-    },
+    }
 ]
+
 
 # ---- HyperEVM token addresses for FX fallbacks (fill these) ----
 # Checksummed addresses on HyperEVM for DexScreener lookups
