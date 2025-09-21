@@ -200,4 +200,4 @@ def main_get_dex_info():
     print(json.dumps(meta, indent=2))
 
 if __name__ == "__main__":
-    main_oracle_update()
+    main_get_dex_info()

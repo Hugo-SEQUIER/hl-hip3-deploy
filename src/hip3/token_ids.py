@@ -15,6 +15,7 @@ def get_api_url(network: str = "testnet", api_url_override: Optional[str] = None
         return api_url_override
     if network.lower() == "mainnet":
         return constants.MAINNET_API_URL
+    print(constants.TESTNET_API_URL)
     return constants.TESTNET_API_URL
 
 
